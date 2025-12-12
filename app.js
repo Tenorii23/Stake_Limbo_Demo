@@ -10,6 +10,13 @@ const CONFIG = {
   minWinChance: 0.01,
   maxWinChance: 99.0
 };
+const tickSound = new Audio("sounds/tick.m4a");
+tickSound.volume = 0.25;
+
+let isAnimatingMultiplier = false;
+
+let stopTickSound = false;
+
 
 const balanceAmountEl = document.getElementById("balance-amount");
 const betInput = document.getElementById("bet-input");
@@ -489,14 +496,60 @@ function rollLimboMultiplier() {
   return clamp(m, 1.0, CONFIG.maxTarget);
 }
 
-function setCenterResult(mult, didWin) {
-  limboMultiplierEl.textContent = formatMult(mult);
+
+function setCenterResult(finalMult, didWin) {
+    
+  if (isAnimatingMultiplier) return;
+  isAnimatingMultiplier = true;
+
+  const startValue = 1.0;
+  const endValue = finalMult;
+
   limboMultiplierEl.classList.remove("win", "lose");
-  limboMultiplierEl.classList.add(didWin ? "win" : "lose");
-  setTimeout(() => limboMultiplierEl.classList.remove("win", "lose"), 900);
+  limboMultiplierEl.textContent = "1.00x";
+
+  let duration = Math.min(900, 300 + endValue * 120);
+  if (state.fastMode) duration = 160;
+  if (state.turboMode) duration = 40;
+
+  let lastTickValue = 1.0;
+
+  animateMultiplier(
+    startValue,
+    endValue,
+    duration,
+    (value) => {
+      limboMultiplierEl.textContent = value.toFixed(2) + "x";
+const rounded = Math.floor(value * 20); // 0.05 steps
+if (!state.turboMode && rounded > lastTickValue) {
+  const tick = tickSound.cloneNode();
+  tick.volume = 0.25;
+  tick.play();
+  lastTickValue = rounded;
+}
+ {
+const tick = tickSound.cloneNode();
+tick.volume = 0.25;
+tick.play();
+
+        lastTickValue = value;
+      }
+    },
+    () => {
+      limboMultiplierEl.textContent = endValue.toFixed(2) + "x";
+      limboMultiplierEl.classList.add(didWin ? "win" : "lose");
+      isAnimatingMultiplier = false;
+    }
+  );
 }
 
+let lastTickValue = 20; // 1.00 * 20
+
+
+
 function playRound() {
+
+
   const bet = parseFloat(state.betAmount);
   if (isNaN(bet) || bet < CONFIG.minBet) {
     showNotification(`Minimum bet is $${CONFIG.minBet}`, "warning");
@@ -559,7 +612,8 @@ function playRound() {
   updateStatsUI();
   updateAdvancedStats();
   drawStatsChart();
-  setCenterResult(resultMult, win);
+setCenterResult(resultMult, win);
+
 }
 
 function onBetInputChange() {
@@ -618,6 +672,8 @@ function attachEvents() {
     syncTargetAndChance("target");
   });
 
+
+  
   betBtn.addEventListener("click", () => {
     playRound();
   });
@@ -715,5 +771,31 @@ function init() {
   attachEvents();
   setupMenu();
 }
+
+
+function animateMultiplier(from, to, duration, onUpdate, onComplete) {
+  const start = performance.now();
+  const diff = to - from;
+
+  function frame(now) {
+    const elapsed = now - start;
+    const progress = Math.min(elapsed / duration, 1);
+
+    const eased = 1 - Math.pow(1 - progress, 3);
+    const current = from + diff * eased;
+
+    onUpdate(current);
+
+    if (progress < 1) {
+      requestAnimationFrame(frame);
+    } else {
+      onUpdate(to);
+      if (onComplete) onComplete();
+    }
+  }
+
+  requestAnimationFrame(frame);
+}
+
 
 document.addEventListener("DOMContentLoaded", init);
