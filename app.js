@@ -10,12 +10,13 @@ const CONFIG = {
   minWinChance: 0.01,
   maxWinChance: 99.0
 };
-const tickSound = new Audio("sounds/tick.m4a");
+const tickSound = new Audio("sounds/tick.mp3");
 tickSound.volume = 0.25;
 
 let isAnimatingMultiplier = false;
 
 let stopTickSound = false;
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
 
 const balanceAmountEl = document.getElementById("balance-amount");
@@ -498,9 +499,10 @@ function rollLimboMultiplier() {
 
 
 function setCenterResult(finalMult, didWin) {
-    
   if (isAnimatingMultiplier) return;
   isAnimatingMultiplier = true;
+
+  stopTickSound = false;
 
   const startValue = 1.0;
   const endValue = finalMult;
@@ -512,7 +514,8 @@ function setCenterResult(finalMult, didWin) {
   if (state.fastMode) duration = 160;
   if (state.turboMode) duration = 40;
 
-  let lastTickValue = 1.0;
+  let lastStep = 20; // 1.00 * 20 (0.05 steps)
+  let started = false;
 
   animateMultiplier(
     startValue,
@@ -520,24 +523,29 @@ function setCenterResult(finalMult, didWin) {
     duration,
     (value) => {
       limboMultiplierEl.textContent = value.toFixed(2) + "x";
-const rounded = Math.floor(value * 20); // 0.05 steps
-if (!state.turboMode && rounded > lastTickValue) {
-  const tick = tickSound.cloneNode();
-  tick.volume = 0.25;
-  tick.play();
-  lastTickValue = rounded;
-}
- {
-const tick = tickSound.cloneNode();
-tick.volume = 0.25;
-tick.play();
 
-        lastTickValue = value;
+      if (state.turboMode) return;
+
+      // START sound exactly when animation starts
+      if (!started) {
+        started = true;
+      }
+
+      const step = Math.floor(value * 20);
+
+      // STOP ticks BEFORE final frame
+      if (step > lastStep && value < endValue - 0.02) {
+        playTick(900 + value * 25); // pitch rises like Stake
+        lastStep = step;
       }
     },
     () => {
+      // HARD STOP — no more ticks possible
+      stopTickSound = true;
+
       limboMultiplierEl.textContent = endValue.toFixed(2) + "x";
       limboMultiplierEl.classList.add(didWin ? "win" : "lose");
+
       isAnimatingMultiplier = false;
     }
   );
@@ -545,6 +553,25 @@ tick.play();
 
 let lastTickValue = 20; // 1.00 * 20
 
+function playTick(freq = 1100) {
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+
+  osc.type = "square";
+  osc.frequency.value = freq;
+
+  gain.gain.setValueAtTime(0.18, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(
+    0.001,
+    audioCtx.currentTime + 0.035
+  );
+
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+
+  osc.start();
+  osc.stop(audioCtx.currentTime + 0.035);
+}
 
 
 function playRound() {
